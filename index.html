@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Beckys Neon Pub Multiplayer</title>
+<style>
+body {
+    margin:0;
+    font-family: Georgia, serif;
+    background: radial-gradient(circle at center,#0f2a4a 0%,#08182c 70%,#050f1c 100%);
+    color:#f5e6c8;
+}
+h1 { text-align:center; color:#00ffff; margin:10px; }
+
+.container {
+    display:flex;
+    justify-content:space-between;
+    padding:20px 60px;
+}
+
+/* Kassen */
+.deck {
+    background: #0a0c12;
+    padding: 20px;
+    border-radius: 20px;
+    width: 380px;
+    display:flex;
+    justify-content:center;
+    box-shadow:0 0 20px #000 inset;
+}
+
+.drinks {
+    display:grid;
+    grid-template-columns:repeat(5, 80px);
+    gap:10px;
+    justify-items:center;
+}
+
+.drink-btn {
+    width: 80px;
+    height: 80px;
+    font-size: 12px;
+    font-weight:bold;
+    border-radius:12px;
+    border:2px solid #00ffff;
+    background:#111;
+    color:#00ffff;
+    cursor:pointer;
+}
+
+.drink-btn:disabled {
+    background:#222;
+    color:#555;
+    border-color:#333;
+}
+
+.order-list { font-size:11px; margin-top:8px; }
+
+.lager {
+    background:#111;
+    padding:12px;
+    border-radius:15px;
+    width:220px;
+    font-size:11px;
+    height:500px;
+    overflow-y:auto;
+}
+
+.lager-item {
+    margin-bottom:6px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+}
+
+.lager-item button {
+    background:#222;
+    color:#00ffff;
+    border:none;
+    border-radius:5px;
+    width:25px;
+    height:25px;
+    font-weight:bold;
+    cursor:pointer;
+}
+
+.lager-item .name {
+    flex:1;
+    text-align:center;
+}
+
+#happyButton {
+    display:block;
+    margin:0 auto 20px auto;
+    font-size:16px;
+    padding:12px 20px;
+    border:none;
+    border-radius:10px;
+    cursor:pointer;
+    background:#ff0000;
+}
+
+.finish-btn {
+    display:block;
+    width:100%;
+    margin-top:10px;
+    background:#222;
+    color:white;
+    border:none;
+    padding:8px;
+    border-radius:5px;
+    cursor:pointer;
+}
+
+#closeDayBtn {
+    margin-top:10px;
+    background:#aa0000;
+    color:white;
+    border:none;
+    padding:8px 15px;
+    border-radius:5px;
+    cursor:pointer;
+}
+
+.bottom-center {
+    display:flex;
+    justify-content:center;
+    margin-top:30px;
+}
+</style>
+</head>
+<body>
+
+<h1>🍺 Beckys Neon Pub Multiplayer 🍺</h1>
+
+<button id="happyButton" onclick="handleHappyClick()">Keine Happy Hour</button>
+
+<div class="container">
+    <div>
+        <h3>Becker</h3>
+        <div class="deck"><div class="drinks" id="leftDrinks"></div></div>
+        <div class="order-list" id="leftOrders"></div>
+        Total: $<span id="leftTotal">0</span>
+        <button class="finish-btn" onclick="finishCustomer('left')">Kunde fertig</button>
+    </div>
+
+    <div class="lager">
+        <h3>Lagerbestand</h3>
+        <div id="lagerList"></div>
+    </div>
+
+    <div>
+        <h3>Mary</h3>
+        <div class="deck"><div class="drinks" id="rightDrinks"></div></div>
+        <div class="order-list" id="rightOrders"></div>
+        Total: $<span id="rightTotal">0</span>
+        <button class="finish-btn" onclick="finishCustomer('right')">Kunde fertig</button>
+    </div>
+</div>
+
+<!-- Ehrenbarkeeper Kasse unten -->
+<div class="bottom-center">
+    <div>
+        <h3>Ehrenbarkeeper</h3>
+        <div class="deck"><div class="drinks" id="centerDrinks"></div></div>
+        <div class="order-list" id="centerOrders"></div>
+        Total: $<span id="centerTotal">0</span>
+        <button class="finish-btn" onclick="finishCustomer('center')">Kunde fertig</button>
+    </div>
+</div>
+
+<div style="text-align:center; font-size:20px; margin-top:20px;">
+Tagesumsatz: $<span id="dayTotal">0</span><br>
+<button id="closeDayBtn" onclick="closeDay()">Geschlossen / Reset</button>
+</div>
+
+<!-- LOGIN -->
+<div id="loginOverlay" style="
+position:fixed;
+inset:0;
+background:black;
+display:flex;
+justify-content:center;
+align-items:center;
+flex-direction:column;
+z-index:5000;
+color:#00ffff;
+font-family:Arial;
+">
+
+<h2>Beckys Online Neon Pub</h2>
+
+<input id="playerName" placeholder="Dein Name" style="padding:8px;margin:5px;border-radius:5px;border:none;">
+<input id="roomCode" placeholder="Raumcode (z.B. PUB2026)" style="padding:8px;margin:5px;border-radius:5px;border:none;">
+
+<div style="margin-top:10px;">
+<button onclick="createRoom()" style="padding:8px 15px;margin:5px;">Raum erstellen</button>
+<button onclick="joinRoom()" style="padding:8px 15px;margin:5px;">Raum beitreten</button>
+</div>
+
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+
+<script>
+// Firebase Config
+const firebaseConfig = {
+  apiKey: "AIzaSyA5GD8bnVFYX4q1fUvZwE0fM1lHHK9P7_Y",
+  authDomain: "beckys-neon-pub.firebaseapp.com",
+  databaseURL: "https://beckys-neon-pub-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "beckys-neon-pub",
+  storageBucket: "beckys-neon-pub.appspot.com",
+  messagingSenderId: "76953039406",
+  appId: "1:76953039406:web:3504948a4213595be2a5bf"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+// Getränke & Lager
+const drinks = [
+["Aqua De Muerto",5],["Gin",3.5],["Kaktus Gin",3.5],["Limoncello",3.5],
+["Old Absinthe",3.5],["Tequila",3.5],["Wodka",3.5],["Honig-Met",4.5],
+["nordischer Met",6],["Bullet Shot",4],["Rum",6.5],["Blended Scotch",5.5],
+["Rye Whiskey",5.5],["Whisky",4],["Bier",3.5],["Bärenpranke Vodka",6],
+["Blue Ice",6.5],["Erdbeer Vodka",7],["Fruit Smash",9],["Irish Cream",15],
+["Light Punches",12],["Valentiner-Whiskey",6.5],["French 75",15],
+["Kir Royale",15],["Tropical Orange",6]
+];
+
+let stock = {};
+let state = {left:{}, right:{}, center:{}};
+let dayTotal = 0;
+let currentRoom = null;
+let happyMode = false;
+let happySet = new Set();
+
+// Init Lager
+drinks.forEach(d=>stock[d[0]]=10);
+
+function renderAll(){
+    renderButtons();
+    renderOrders();
+    renderStock();
+}
+
+// Getränke Buttons mit Happy Hour 10% Rabatt
+function renderButtons(){
+    ["left","right","center"].forEach(side=>{
+        const box=document.getElementById(side+"Drinks");
+        box.innerHTML="";
+        drinks.forEach(d=>{
+            let basePrice=d[1];
+            let finalPrice = basePrice;
+            if(happyMode && happySet.has(d[0])) finalPrice = basePrice * 0.9;
+
+            const btn=document.createElement("button");
+            btn.className="drink-btn";
+            btn.innerText=d[0]+"\n$"+finalPrice.toFixed(2);
+            btn.disabled = stock[d[0]] <= 0;
+
+            if(happySet.has(d[0])) {
+                btn.style.color="#bb00ff";
+                btn.style.border="2px solid #bb00ff";
+                btn.style.boxShadow="0 0 12px #bb00ff";
+            } else {
+                btn.style.color="#00ffff";
+                btn.style.border="2px solid #00ffff";
+                btn.style.boxShadow="none";
+            }
+
+            btn.onclick = ()=>{
+                if(happyMode){
+                    happySet.has(d[0]) ? happySet.delete(d[0]) : happySet.add(d[0]);
+                    renderAll();
+                } else {
+                    addDrink(side, d[0], finalPrice);
+                }
+            };
+            box.appendChild(btn);
+        });
+    });
+}
+
+function renderOrders(){
+    ["left","right","center"].forEach(side=>{
+        let total=0;
+        let list=document.getElementById(side+"Orders");
+        list.innerHTML="";
+        for(let n in state[side]){
+            total+=state[side][n].qty*state[side][n].price;
+            list.innerHTML+=n+" x"+state[side][n].qty+"<br>";
+        }
+        document.getElementById(side+"Total").innerText=total.toFixed(2);
+    });
+}
+
+function renderStock(){
+    const box=document.getElementById("lagerList");
+    box.innerHTML="";
+    drinks.forEach(d=>{
+        const div=document.createElement("div");
+        div.className="lager-item";
+
+        const minus=document.createElement("button"); minus.innerText="-";
+        minus.onclick=()=>{if(stock[d[0]]>0){stock[d[0]]--; saveStock(); renderAll();}};
+        div.appendChild(minus);
+
+        const name=document.createElement("span");
+        name.className="name";
+        name.innerText=d[0]+": "+stock[d[0]];
+        if(happySet.has(d[0])) name.style.color="#bb00ff";
+        div.appendChild(name);
+
+        const plus=document.createElement("button"); plus.innerText="+";
+        plus.onclick=()=>{stock[d[0]]++; saveStock(); renderAll();};
+        div.appendChild(plus);
+
+        box.appendChild(div);
+    });
+}
+
+function addDrink(side,name,price){
+    if(stock[name]<=0) return;
+    stock[name]--;
+    if(!state[side][name]) state[side][name]={qty:0,price};
+    state[side][name].qty++;
+    saveStock();
+    renderAll();
+}
+
+function finishCustomer(side){
+    let total=0;
+    for(let n in state[side])
+        total+=state[side][n].qty*state[side][n].price;
+    dayTotal+=total;
+    saveDayTotal();
+    state[side]={};
+    document.getElementById("dayTotal").innerText=dayTotal.toFixed(2);
+    renderAll();
+}
+
+function closeDay(){
+    dayTotal=0;
+    saveDayTotal();
+    document.getElementById("dayTotal").innerText="0";
+}
+
+// Happy Hour
+function handleHappyClick(){
+    const btn=document.getElementById("happyButton");
+    if(!happyMode){
+        happyMode=true;
+        btn.innerText="Happy Hour auswählen";
+        btn.style.background="#ffff00";
+    } else {
+        happyMode=false;
+        btn.innerText="Keine Happy Hour";
+        btn.style.background="#ff0000";
+        happySet.clear();
+    }
+    renderAll();
+}
+
+// Firebase Room
+function createRoom(){
+    const playerName=document.getElementById("playerName").value.trim();
+    currentRoom=document.getElementById("roomCode").value.trim();
+    if(!playerName || !currentRoom){ alert("Name + Raumcode eingeben"); return; }
+
+    let initialStock={};
+    drinks.forEach(d=>initialStock[d[0]]=10);
+
+    db.ref("rooms/"+currentRoom).set({stock:initialStock, dayTotal:0})
+    .then(()=>{ alert("Raum erstellt!"); startGame(); })
+    .catch(e=>{ alert("Fehler: "+e); });
+}
+
+function joinRoom(){
+    const playerName=document.getElementById("playerName").value.trim();
+    currentRoom=document.getElementById("roomCode").value.trim();
+    if(!playerName || !currentRoom){ alert("Name + Raumcode eingeben"); return; }
+
+    db.ref("rooms/"+currentRoom).once("value").then(snapshot=>{
+        if(!snapshot.exists()){ alert("Raum existiert nicht"); return; }
+        alert("Raum beigetreten!"); startGame();
+    });
+}
+
+function startGame(){
+    document.getElementById("loginOverlay").style.display="none";
+
+    db.ref("rooms/"+currentRoom).on("value",snapshot=>{
+        const data=snapshot.val();
+        if(!data) return;
+        stock=data.stock||stock;
+        dayTotal=data.dayTotal||0;
+        document.getElementById("dayTotal").innerText=dayTotal.toFixed(2);
+        renderAll();
+    });
+}
+
+function saveStock(){ if(currentRoom) db.ref("rooms/"+currentRoom+"/stock").set(stock); }
+function saveDayTotal(){ if(currentRoom) db.ref("rooms/"+currentRoom+"/dayTotal").set(dayTotal); }
+
+renderAll();
+</script>
+</body>
+</html>
